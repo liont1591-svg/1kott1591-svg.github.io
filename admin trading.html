@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Psych + RR Dashboard (PWA)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    :root { --bg:#0b1220; --card:#121a2a; --text:#e6eefc; --muted:#9fb1d1; --line:#1e2940; --accent:#3b82f6; --green:#10b981; --red:#ef4444; --amber:#f59e0b; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+    header,footer{padding:16px 20px} header h1{margin:0 0 6px;font-size:20px} .muted{color:var(--muted)} .small{font-size:12px} .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+    main{padding:0 20px 40px;display:grid;gap:16px;grid-template-columns:1fr}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+    h2{margin:0 0 10px;font-size:18px}
+    .summary{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0}
+    .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--line);background:#0f172a;color:var(--muted);padding:6px 10px;border-radius:999px;font-size:12px}
+    .pill .v{color:var(--text)}
+    .grid{display:grid;gap:10px}
+    .row{display:grid;gap:10px;grid-template-columns:repeat(6,minmax(120px,1fr))}
+    label{color:var(--muted);font-size:12px}
+    input,select,button,textarea{background:#0f172a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+    input[type="range"]{padding:0}
+    textarea{min-height:64px;resize:vertical}
+    .computed{display:flex;gap:20px;align-items:center;color:var(--green);flex-wrap:wrap}
+    .warn{color:var(--amber)}
+    .error{color:var(--red)}
+    button.primary{background:var(--accent);border:none;cursor:pointer}
+    button.primary:hover{filter:brightness(1.05)}
+    button.ghost{background:transparent;border:1px dashed var(--line);color:var(--muted);cursor:pointer}
+    button.danger{background:var(--red);border:none;color:white;cursor:pointer}
+    .alerts .alert{background:#1a2438;border-left:4px solid var(--amber);padding:8px 10px;margin-top:8px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid var(--line);padding:8px;font-size:13px}
+    th{text-align:left;color:var(--muted)}
+    .right{text-align:right} .good{color:var(--green)} .bad{color:var(--red)}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    .section-note{background:#0f172a;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:10px 0}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(200px,1fr));gap:10px}
+    @media (max-width: 900px){ .row{grid-template-columns:repeat(2,1fr)} .grid-3{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Trading Psychology & Risk-Reward Dashboard</h1>
+    <div class="muted small">Discipline over impulse. Edge-only setups. Max risk 1.5% per trade.</div>
+    <div class="summary">
+      <div class="pill"><span>Total</span><span class="v" id="s-total">0</span></div>
+      <div class="pill"><span>Wins</span><span class="v" id="s-wins">0</span></div>
+      <div class="pill"><span>Losses</span><span class="v" id="s-losses">0</span></div>
+      <div class="pill"><span>Win%</span><span class="v" id="s-winrate">-</span></div>
+      <div class="pill"><span>Avg RR</span><span class="v" id="s-avgrr">-</span></div>
+      <div class="pill"><span>Avg PnL</span><span class="v" id="s-avgpnl">-</span></div>
+      <div class="pill"><span>Streak</span><span class="v" id="s-streak">0</span></div>
+      <div class="pill"><span>Today PnL</span><span class="v" id="s-daypnl">0</span></div>
+    </div>
+    <div class="section-note">
+      <div class="small">
+        - No impulse trading. Confirm checklist. If RR < 1.5 or risk > 1.5%, you don’t take it. 
+        - If daily drawdown hits your limit, you stop for the day.
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Settings</h2>
+      <div class="row">
+        <div>
+          <label for="accountBalance">Account balance (USD)</label>
+          <input id="accountBalance" type="number" step="0.01" placeholder="200000" />
+        </div>
+        <div>
+          <label for="riskCapPct">Max risk per trade %</label>
+          <input id="riskCapPct" type="number" step="0.1" value="1.5" />
+        </div>
+        <div>
+          <label for="dailyLossLimit">Daily loss limit (USD)</label>
+          <input id="dailyLossLimit" type="number" step="0.01" placeholder="10000" />
+        </div>
+        <div>
+          <label for="cooldownSec">Cooldown between trades (sec)</label>
+          <input id="cooldownSec" type="number" step="1" value="90" />
+        </div>
+        <div>
+          <label for="requireEdge">Edge checklist required</label>
+          <select id="requireEdge">
+            <option value="1" selected>Yes</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+        <div class="right">
+          <label>&nbsp;</label>
+          <button id="saveSettings" class="ghost">Save settings</button>
+        </div>
+      </div>
+      <div id="settingsMsg" class="small muted"></div>
+    </section>
+
+    <section class="card">
+      <h2>New trade</h2>
+      <form id="trade-form" class="grid">
+        <div class="row">
+          <div>
+            <label for="date">Date</label>
+            <input id="date" name="date" type="date" />
+          </div>
+          <div>
+            <label for="symbol">Symbol</label>
+            <input id="symbol" name="symbol" placeholder="BTCUSDT" />
+          </div>
+          <div>
+            <label for="side">Side</label>
+            <select id="side" name="side">
+              <option>LONG</option>
+              <option>SHORT</option>
+            </select>
+          </div>
+          <div>
+            <label>Mode</label>
+            <select id="mode" name="mode">
+              <option value="price" selected>Price mode</option>
+              <option value="usd">USD mode</option>
+            </select>
+          </div>
+          <div>
+            <label for="session">Session</label>
+            <select id="session" name="session">
+              <option value="Asia">Asia</option>
+              <option value="London">London</option>
+              <option value="NY">NY</option>
+            </select>
+          </div>
+          <div>
+            <label for="edge">Edge checklist</label>
+            <select id="edge" name="edge">
+              <option value="1">Met</option>
+              <option value="0">Not met</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" id="price-fields">
+          <div>
+            <label for="entry">Entry price (optional)</label>
+            <input id="entry" name="entry" type="number" step="0.0001" />
+          </div>
+          <div>
+            <label for="stop">Stop price (optional)</label>
+            <input id="stop" name="stop" type="number" step="0.0001" />
+          </div>
+          <div>
+            <label for="target">Target price (optional)</label>
+            <input id="target" name="target" type="number" step="0.0001" />
+          </div>
+          <div>
+            <label for="exit">Exit price (optional)</label>
+            <input id="exit" name="exit" type="number" step="0.0001" />
+          </div>
+          <div>
+            <label for="size">Size (units)</label>
+            <input id="size" name="size" type="number" step="0.0001" placeholder="e.g., 0.25" />
+          </div>
+          <div>
+            <label for="posRiskPct">Plan risk %</label>
+            <input id="posRiskPct" name="posRiskPct" type="number" step="0.1" placeholder="e.g., 1.0" />
+          </div>
+        </div>
+
+        <div class="row" id="usd-fields" style="display:none">
+          <div>
+            <label for="riskUSD">Risk USD (to SL)</label>
+            <input id="riskUSD" name="riskUSD" type="number" step="0.01" placeholder="e.g., 3000" />
+          </div>
+          <div>
+            <label for="rewardUSD">Reward USD (to TP)</label>
+            <input id="rewardUSD" name="rewardUSD" type="number" step="0.01" placeholder="e.g., 6000" />
+          </div>
+          <div>
+            <label for="exitUSD">Exit PnL USD (optional)</label>
+            <input id="exitUSD" name="exitUSD" type="number" step="0.01" placeholder="Realized PnL" />
+          </div>
+          <div>
+            <label for="size2">Size (optional)</label>
+            <input id="size2" name="size2" type="number" step="0.0001" />
+          </div>
+          <div>
+            <label for="posRiskPct2">Plan risk %</label>
+            <input id="posRiskPct2" name="posRiskPct2" type="number" step="0.1" placeholder="e.g., 1.0" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="mood">Mood 1–5</label>
+            <input id="mood" name="mood" type="range" min="1" max="5" value="3" />
+          </div>
+          <div>
+            <label for="stress">Stress 1–5</label>
+            <input id="stress" name="stress" type="range" min="1" max="5" value="3" />
+          </div>
+          <div>
+            <label for="confidence">Confidence 1–5</label>
+            <input id="confidence" name="confidence" type="range" min="1" max="5" value="3" />
+          </div>
+          <div style="grid-column: span 3;">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" placeholder="Setup, structure, higher-timeframe bias, invalidation..."></textarea>
+          </div>
+        </div>
+
+        <div class="computed">
+          <div><strong>Planned RR:</strong> <span class="mono" id="c-rr">-</span></div>
+          <div><strong>Risk USD:</strong> <span class="mono" id="c-risk">-</span></div>
+          <div><strong>Reward USD:</strong> <span class="mono" id="c-rew">-</span></div>
+          <div id="disciplineMsg" class="mono"></div>
+        </div>
+
+        <div class="alerts" id="biasAlerts"></div>
+
+        <div class="toolbar">
+          <button type="submit" class="primary">Add trade</button>
+          <button id="exportBtn" type="button" class="ghost">Export JSON</button>
+          <label class="ghost">
+            <input id="importFile" type="file" accept="application/json" hidden />
+            <span style="cursor:pointer">Import JSON</span>
+          </label>
+          <button id="resetBtn" type="button" class="danger">Reset all</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Trade journal</h2>
+      <table id="journal">
+        <thead>
+          <tr>
+            <th>Date</th><th>Symbol</th><th>Side</th>
+            <th>Session</th><th class="right">Risk USD</th><th class="right">Reward USD</th><th class="right">RR</th>
+            <th class="right">PnL USD</th>
+            <th>Mood</th><th>Stress</th><th>Conf</th>
+            <th>Edge</th><th>Outcome</th><th>Notes</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Psychology analytics</h2>
+      <div class="grid-3">
+        <div>
+          <h3 class="small muted">Mood vs outcome</h3>
+          <table id="mx-mood"><thead>
+            <tr><th>Mood</th><th class="right">TP</th><th class="right">SL</th><th class="right">Win%</th><th class="right">Avg PnL</th></tr>
+          </thead><tbody></tbody></table>
+        </div>
+        <div>
+          <h3 class="small muted">Stress vs outcome</h3>
+          <table id="mx-stress"><thead>
+            <tr><th>Stress</th><th class="right">TP</th><th class="right">SL</th><th class="right">Win%</th><th class="right">Avg PnL</th></tr>
+          </thead><tbody></tbody></table>
+        </div>
+        <div>
+          <h3 class="small muted">Confidence vs RR</h3>
+          <table id="mx-conf"><thead>
+            <tr><th>Conf</th><th class="right">Avg RR</th><th class="right">Avg PnL</th><th class="right">N</th></tr>
+          </thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <h3 class="small muted">Time-of-day buckets</h3>
+        <table id="mx-tod"><thead>
+          <tr><th>Bucket</th><th class="right">Avg PnL</th><th class="right">Win%</th><th class="right">N</th></tr>
+        </thead><tbody></tbody></table>
+      </div>
+      <p class="small muted">Outcome logic: TP if realized PnL > 0, SL if ≤ 0. Trades without realized PnL are excluded from outcome stats.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="muted small">Mindfulness: 3 slow breaths. If mood ≤2 or stress ≥4, reduce risk or step away.</div>
+  </footer>
+
+  <script>
+    // Storage
+    const KEY = 'trades_v3';
+    const SETTINGS_KEY = 'settings_v1';
+    const read = () => JSON.parse(localStorage.getItem(KEY) || '[]');
+    const write = (rows) => localStorage.setItem(KEY, JSON.stringify(rows));
+    const readSettings = () => ({ accountBalance: 200000, riskCapPct: 1.5, dailyLossLimit: 10000, cooldownSec: 90, requireEdge: 1, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') });
+    const writeSettings = (s) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+
+    // Elements
+    const form = document.getElementById('trade-form');
+    const modeSel = document.getElementById('mode');
+    const priceFields = document.getElementById('price-fields');
+    const usdFields = document.getElementById('usd-fields');
+    const rrEl = document.getElementById('c-rr'); const riskEl = document.getElementById('c-risk'); const rewEl = document.getElementById('c-rew');
+    const biasEl = document.getElementById('biasAlerts'); const discEl = document.getElementById('disciplineMsg');
+    const tb = document.querySelector('#journal tbody');
+    const sTotal = document.getElementById('s-total'); const sWins = document.getElementById('s-wins'); const sLosses = document.getElementById('s-losses');
+    const sWinrate = document.getElementById('s-winrate'); const sAvgRR = document.getElementById('s-avgrr'); const sAvgPnL = document.getElementById('s-avgpnl');
+    const sStreak = document.getElementById('s-streak'); const sDayPnL = document.getElementById('s-daypnl');
+
+    // Settings bindings
+    const accEl = document.getElementById('accountBalance');
+    const capEl = document.getElementById('riskCapPct');
+    const ddEl = document.getElementById('dailyLossLimit');
+    const cdEl = document.getElementById('cooldownSec');
+    const reqEdgeEl = document.getElementById('requireEdge');
+    const settingsMsg = document.getElementById('settingsMsg');
+    document.getElementById('saveSettings').addEventListener('click', () => {
+      const s = {
+        accountBalance: Number(accEl.value || 0),
+        riskCapPct: Number(capEl.value || 1.5),
+        dailyLossLimit: Number(ddEl.value || 0),
+        cooldownSec: Number(cdEl.value || 0),
+        requireEdge: Number(reqEdgeEl.value || 1),
+      };
+      writeSettings(s);
+      settingsMsg.textContent = 'Settings saved.';
+      setTimeout(()=>settingsMsg.textContent='',1500);
+      updateComputed();
+      renderAll();
+    });
+
+    // Load settings
+    (function initSettings(){
+      const s = readSettings();
+      accEl.value = s.accountBalance;
+      capEl.value = s.riskCapPct;
+      ddEl.value = s.dailyLossLimit;
+      cdEl.value = s.cooldownSec;
+      reqEdgeEl.value = s.requireEdge;
+    })();
+
+    // Mode switch
+    modeSel.addEventListener('change', () => {
+      const mode = modeSel.value;
+      priceFields.style.display = mode === 'price' ? '' : 'none';
+      usdFields.style.display = mode === 'usd' ? '' : 'none';
+      updateComputed();
+    });
+
+    // Utils
+    function plannedFromPrice({side, entry, stop, target, size}) {
+      if ([entry, stop, target, size].some(v => v == null || isNaN(v))) return { rr: null, riskUSD: null, rewardUSD: null };
+      const perRisk = side === 'LONG' ? (entry - stop) : (stop - entry);
+      const perRew = side === 'LONG' ? (target - entry) : (entry - target);
+      if (perRisk <= 0 || perRew <= 0) return { rr: null, riskUSD: null, rewardUSD: null };
+      const riskUSD = perRisk * size, rewardUSD = perRew * size;
+      return { rr: Number((rewardUSD / riskUSD).toFixed(2)), riskUSD: Number(riskUSD.toFixed(2)), rewardUSD: Number(rewardUSD.toFixed(2)) };
+    }
+    function plannedFromUSD({riskUSD, rewardUSD}) {
+      if ([riskUSD, rewardUSD].some(v => v == null || isNaN(v) || v <= 0)) return { rr: null, riskUSD: null, rewardUSD: null };
+      return { rr: Number((rewardUSD / riskUSD).toFixed(2)), riskUSD: Number(riskUSD.toFixed(2)), rewardUSD: Number(rewardUSD.toFixed(2)) };
+    }
+    function realizedPnLUSD({mode, side, entry, exit, size, exitUSD}) {
+      if (mode === 'usd') return (exitUSD===''||exitUSD==null||isNaN(Number(exitUSD)))?null:Number(Number(exitUSD).toFixed(2));
+      if ([entry, exit, size].some(v => v == null || v === '' || isNaN(Number(v)))) return null;
+      const per = side === 'LONG' ? (exit - entry) : (entry - exit);
+      return Number((per * size).toFixed(2));
+    }
+    function timeBucket(dateStr) {
+      // Use local time hour if date provided; else Unknown
+      const d = dateStr ? new Date(dateStr+'T00:00:00') : null;
+      if (!d) return 'Unknown';
+      const h = new Date().getHours(); // fallback simple current hour (no timestamp per trade)
+      if (h<10) return 'Asia';
+      if (h<16) return 'London';
+      return 'NY';
+    }
+
+    // Discipline checks
+    function disciplineChecks(rr, riskPct, settings, edgeMet, dayPnL) {
+      const msgs = [];
+      let fatal = false;
+
+      if (settings.requireEdge && !edgeMet) { msgs.push('Edge checklist not met.'); fatal = true; }
+      if (riskPct != null && riskPct > settings.riskCapPct) { msgs.push(`Risk ${riskPct.toFixed(2)}% exceeds cap ${settings.riskCapPct}%.`); fatal = true; }
+      if (rr != null && rr < 1.5) { msgs.push('Planned RR < 1.5 (weak asymmetry).'); }
+      if (settings.dailyLossLimit && dayPnL != null && -dayPnL >= settings.dailyLossLimit) { msgs.push('Daily loss limit reached. Stop trading.'); fatal = true; }
+
+      return { msgs, fatal };
+    }
+
+    // Bias alerts
+    function biasAlerts(rr, mood, stress) {
+      const a = [];
+      if (rr != null && rr < 1) a.push('Planned RR < 1: poor asymmetry.');
+      if (Number(stress) >= 4) a.push('High stress — reduce size or pause.');
+      if (Number(mood) <= 2) a.push('Low mood — confirm checklist before entering.');
+      biasEl.innerHTML = a.map(x=>`<div class="alert">${x}</div>`).join('');
+    }
+
+    // Live computed display
+    function updateComputed() {
+      const s = readSettings();
+      const fd = new FormData(form);
+      const mode = fd.get('mode') || 'price';
+      const side = fd.get('side') || 'LONG';
+      const edgeMet = Number(fd.get('edge')||0)===1;
+      let rr=null, riskUSD=null, rewardUSD=null, riskPct=null;
+
+      if (mode === 'price') {
+        const entry = Number(fd.get('entry')); const stop = Number(fd.get('stop'));
+        const target = Number(fd.get('target')); const size = Number(fd.get('size'));
+        const res = plannedFromPrice({side, entry, stop, target, size});
+        rr = res.rr; riskUSD = res.riskUSD; rewardUSD = res.rewardUSD;
+      } else {
+        const risk = Number(fd.get('riskUSD')); const rew = Number(fd.get('rewardUSD'));
+        const res = plannedFromUSD({riskUSD: risk, rewardUSD: rew});
+        rr = res.rr; riskUSD = res.riskUSD; rewardUSD = res.rewardUSD;
+      }
+
+      if (riskUSD != null && s.accountBalance) {
+        riskPct = (riskUSD / s.accountBalance) * 100;
+      } else {
+        const planPct = Number((fd.get('posRiskPct')||fd.get('posRiskPct2')||''));
+        riskPct = isNaN(planPct)?null:planPct;
+      }
+
+      rrEl.textContent = rr ?? '-';
+      riskEl.textContent = riskUSD ?? '-';
+      rewEl.textContent = rewardUSD ?? '-';
+
+      const dayPnL = getTodayPnL(read());
+      const { msgs, fatal } = disciplineChecks(rr, riskPct, s, edgeMet, dayPnL);
+      discEl.className = fatal ? 'mono error' : (msgs.length ? 'mono warn' : 'mono');
+      discEl.textContent = msgs.join(' | ');
+      biasAlerts(rr, fd.get('mood'), fd.get('stress'));
+    }
+    form.addEventListener('input', updateComputed);
+    form.addEventListener('change', updateComputed);
+
+    // Cooldown
+    const LAST_TRADE_TS = 'last_trade_ts';
+
+    // Submit
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const s = readSettings();
+      // Cooldown check
+      const lastTs = Number(localStorage.getItem(LAST_TRADE_TS) || 0);
+      const now = Date.now();
+      const remaining = s.cooldownSec*1000 - (now - lastTs);
+      if (remaining > 0) {
+        alert(`Cooldown active. Wait ${Math.ceil(remaining/1000)}s before adding another trade.`);
+        return;
+      }
+
+      const fd = new FormData(form);
+      const mode = fd.get('mode') || 'price';
+      const side = fd.get('side') || 'LONG';
+      const edgeMet = Number(fd.get('edge')||0)===1;
+
+      const base = {
+        id: crypto.randomUUID(),
+        date: fd.get('date') || '',
+        symbol: fd.get('symbol') || '',
+        side, mode,
+        session: fd.get('session') || timeBucket(fd.get('date')),
+        mood: Number(fd.get('mood') || 0),
+        stress: Number(fd.get('stress') || 0),
+        confidence: Number(fd.get('confidence') || 0),
+        notes: fd.get('notes') || '',
+        edge: edgeMet ? 'Yes' : 'No'
+      };
+
+      let plan = { rr:null, riskUSD:null, rewardUSD:null };
+      let pnl = null; let riskPct = null;
+
+      if (mode === 'price') {
+        const entry = fd.get('entry')===''?null:Number(fd.get('entry'));
+        const stop = fd.get('stop')===''?null:Number(fd.get('stop'));
+        const target = fd.get('target')===''?null:Number(fd.get('target'));
+        const exit = fd.get('exit')===''?null:Number(fd.get('exit'));
+        const size = fd.get('size')===''?null:Number(fd.get('size'));
+        Object.assign(base, { entry, stop, target, exit, size });
+        plan = plannedFromPrice({ side, entry, stop, target, size });
+        pnl = realizedPnLUSD({ mode, side, entry, exit, size });
+      } else {
+        const riskUSD = fd.get('riskUSD')===''?null:Number(fd.get('riskUSD'));
+        const rewardUSD = fd.get('rewardUSD')===''?null:Number(fd.get('rewardUSD'));
+        const exitUSD = fd.get('exitUSD')===''?null:Number(fd.get('exitUSD'));
+        const size2 = fd.get('size2')===''?null:Number(fd.get('size2'));
+        Object.assign(base, { riskUSD, rewardUSD, exitUSD, size:size2 });
+        plan = plannedFromUSD({ riskUSD, rewardUSD });
+        pnl = realizedPnLUSD({ mode, side, exitUSD });
+      }
+
+      // Compute risk % (prefer USD if available)
+      if (plan.riskUSD != null && readSettings().accountBalance) {
+        riskPct = (plan.riskUSD / readSettings().accountBalance) * 100;
+      } else {
+        const planPct = Number((fd.get('posRiskPct')||fd.get('posRiskPct2')||''));
+        riskPct = isNaN(planPct)?null:planPct;
+      }
+
+      const { msgs, fatal } = disciplineChecks(plan.rr, riskPct, s, edgeMet, getTodayPnL(read()));
+      if (fatal) {
+        alert('Blocked by rules:\n' + msgs.join('\n'));
+        return;
+      }
+
+      const trade = { ...base, rr: plan.rr, riskUSD: plan.riskUSD, rewardUSD: plan.rewardUSD, pnl, riskPct: riskPct==null?null:Number(riskPct.toFixed(2)) };
+
+      const rows = read();
+      rows.unshift(trade);
+      write(rows);
+      localStorage.setItem(LAST_TRADE_TS, String(now));
+
+      form.reset();
+      updateComputed();
+      renderAll();
+    });
+
+    // Delete
+    function deleteTrade(id) { write(read().filter(r => r.id !== id)); renderAll(); }
+
+    // Export/Import/Reset
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify({ settings: readSettings(), trades: read() }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='trades-export.json'; a.click(); URL.revokeObjectURL(url);
+    });
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const obj = JSON.parse(r.result);
+          if (obj.settings) writeSettings({ ...readSettings(), ...obj.settings });
+          if (Array.isArray(obj.trades)) write(obj.trades);
+          renderAll();
+        } catch(err) { alert('Import failed: ' + err.message); }
+        e.target.value='';
+      };
+      r.readAsText(f);
+    });
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (confirm('Delete all trades and settings?')) { localStorage.removeItem(KEY); localStorage.removeItem(SETTINGS_KEY); location.reload(); }
+    });
+
+    // Rendering
+    function getTodayPnL(rows) {
+      if (!rows.length) return 0;
+      const today = new Date().toISOString().slice(0,10);
+      return rows.filter(r => (r.date||'').slice(0,10)===today && r.pnl!=null).reduce((a,b)=>a+Number(b.pnl),0);
+    }
+    function getStreak(rows) {
+      let streak = 0;
+      for (const r of rows) {
+        if (r.pnl == null) continue;
+        if (r.pnl > 0) { if (streak>=0) streak++; else break; }
+        else { if (streak<=0) streak--; else break; }
+      }
+      return streak;
+    }
+    function renderSummary(rows) {
+      const total = rows.length;
+      const withOutcome = rows.filter(r => r.pnl != null);
+      const wins = withOutcome.filter(r => r.pnl > 0).length;
+      const losses = withOutcome.filter(r => r.pnl <= 0).length;
+      const winrate = withOutcome.length ? ((wins / withOutcome.length) * 100).toFixed(1) + '%' : '-';
+      const avgRR = rows.length ? (rows.reduce((a,b)=>a+(Number(b.rr)||0),0)/rows.length).toFixed(2) : '-';
+      const avgPnL = rows.length ? (rows.reduce((a,b)=>a+(Number(b.pnl)||0),0)/rows.length).toFixed(2) : '-';
+      sTotal.textContent = total; sWins.textContent = wins; sLosses.textContent = losses;
+      sWinrate.textContent = winrate; sAvgRR.textContent = avgRR; sAvgPnL.textContent = avgPnL;
+      sStreak.textContent = getStreak(rows);
+      sDayPnL.textContent = getTodayPnL(rows).toFixed(2);
+    }
+    function renderJournal(rows) {
+      const esc = (t) => (t||'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+      document.querySelector('#journal tbody').innerHTML = rows.map(r => {
+        const rr = r.rr ?? '-';
+        const risk = r.riskUSD ?? '-';
+        const rew = r.rewardUSD ?? '-';
+        const pnl = r.pnl == null ? '-' : (r.pnl >= 0 ? `<span class="good">${Number(r.pnl).toFixed(2)}</span>` : `<span class="bad">${Number(r.pnl).toFixed(2)}</span>`);
+        const outcome = r.pnl == null ? '—' : (r.pnl > 0 ? 'TP' : 'SL');
+        return `
+          <tr>
+            <td>${r.date||''}</td>
+            <td>${esc(r.symbol)}</td>
+            <td>${r.side}</td>
+            <td>${r.session||''}</td>
+            <td class="right">${risk}</td>
+            <td class="right">${rew}</td>
+            <td class="right">${rr}</td>
+            <td class="right">${pnl}</td>
+            <td>${r.mood??''}</td>
+            <td>${r.stress??''}</td>
+            <td>${r.confidence??''}</td>
+            <td>${r.edge}</td>
+            <td>${outcome}</td>
+            <td>${esc(r.notes)}</td>
+            <td class="right"><button class="danger" data-del="${r.id}">Delete</button></td>
+          </tr>
+        `;
+      }).join('');
+      document.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => deleteTrade(btn.getAttribute('data-del'))));
+    }
+    function matrixOutcome(rows, key) {
+      const by = new Map();
+      rows.forEach(r => {
+        if (r.pnl == null) return;
+        const k = Number(r[key]); if (!Number.isFinite(k)) return;
+        const cur = by.get(k) || { tp:0, sl:0, sum:0, n:0 };
+        if (r.pnl > 0) cur.tp++; else cur.sl++;
+        cur.sum += Number(r.pnl); cur.n++; by.set(k, cur);
+      });
+      return Array.from(by.entries()).sort((a,b)=>a[0]-b[0]).map(([k,v]) => ({
+        key:k, tp:v.tp, sl:v.sl, winp: v.n?((v.tp/v.n)*100).toFixed(1)+'%':'-', avg: v.n?(v.sum/v.n).toFixed(2):'-'
+      }));
+    }
+    function matrixConf(rows) {
+      const by = new Map();
+      rows.forEach(r => {
+        const c = Number(r.confidence); if (!Number.isFinite(c)) return;
+        const cur = by.get(c) || { rrSum:0, pnlSum:0, n:0 };
+        cur.rrSum += Number(r.rr||0); cur.pnlSum += Number(r.pnl||0); cur.n++; by.set(c, cur);
+      });
+      return Array.from(by.entries()).sort((a,b)=>a[0]-b[0]).map(([k,v])=>({
+        key:k, avgRR: v.n?(v.rrSum/v.n).toFixed(2):'-', avgPnL: v.n?(v.pnlSum/v.n).toFixed(2):'-', n:v.n
+      }));
+    }
+    function matrixToD(rows) {
+      const by = new Map();
+      rows.forEach(r => {
+        const b = r.session || 'Unknown';
+        const cur = by.get(b) || { pnlSum:0, tp:0, sl:0, n:0 };
+        if (r.pnl != null) { if (r.pnl>0) cur.tp++; else cur.sl++; cur.pnlSum += Number(r.pnl); cur.n++; }
+        by.set(b, cur);
+      });
+      return Array.from(by.entries()).map(([k,v])=>({
+        key:k, avgPnL: v.n?(v.pnlSum/v.n).toFixed(2):'-', winp: v.n?((v.tp/v.n)*100).toFixed(1)+'%':'-', n:v.n
+      })).sort((a,b)=>a.key.localeCompare(b.key));
+    }
+    function renderMatrix(rows, id, data, cols) {
+      const body = document.querySelector(`${id} tbody`);
+      body.innerHTML = data.length ? data.map(r => `
+        <tr>${cols.map(c=>`<td class="${c.right?'right':''}">${r[c.key]}</td>`).join('')}</tr>
+      `).join('') : `<tr><td colspan="${cols.length}" class="muted">No data yet.</td></tr>`;
+    }
+
+    function renderAll() {
+      const rows = read();
+      renderSummary(rows);
+      renderJournal(rows);
+      renderMatrix(rows, '#mx-mood', matrixOutcome(rows, 'mood'), [{key:'key'},{key:'tp',right:1},{key:'sl',right:1},{key:'winp',right:1},{key:'avg',right:1}]);
+      renderMatrix(rows, '#mx-stress', matrixOutcome(rows, 'stress'), [{key:'key'},{key:'tp',right:1},{key:'sl',right:1},{key:'winp',right:1},{key:'avg',right:1}]);
+      renderMatrix(rows, '#mx-conf', matrixConf(rows), [{key:'key'},{key:'avgRR',right:1},{key:'avgPnL',right:1},{key:'n',right:1}]);
+      renderMatrix(rows, '#mx-tod', matrixToD(rows), [{key:'key'},{key:'avgPnL',right:1},{key:'winp',right:1},{key:'n',right:1}]);
+    }
+
+    // Init
+    form.addEventListener('input', updateComputed);
+    updateComputed();
+    renderAll();
+
+    // PWA: Service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(()=>{});
+      });
+    }
+  </script>
+</body>
+</html>
+<section class="card" id="challenge-card">
+  <h2>Challenge Tracker</h2>
+  <div class="row">
+    <div>
+      <label for="chal-start">Start Balance</label>
+      <input id="chal-start" type="number" step="1" placeholder="100000" />
+    </div>
+    <div>
+      <label for="chal-target">Target Balance</label>
+      <input id="chal-target" type="number" step="1" placeholder="120000" />
+    </div>
+    <div>
+      <label for="chal-days">Days Remaining</label>
+      <input id="chal-days" type="number" step="1" placeholder="30" />
+    </div>
+    <div>
+      <label for="chal-trades">Estimated Trades Left</label>
+      <input id="chal-trades" type="number" step="1" placeholder="20" />
+    </div>
+  </div>
+
+  <div class="computed">
+    <div><strong>Needed PnL:</strong> <span class="mono" id="c-need">-</span></div>
+    <div><strong>Daily PnL:</strong> <span class="mono" id="c-daily">-</span></div>
+    <div><strong>Risk/trade:</strong> <span class="mono" id="c-risktrade">-</span></div>
+  </div>
+
+  <canvas id="challChart"></canvas>
+</section>
+<!-- remove this: -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
+
+<!-- add this: -->
+<script src="chart.min.js"></script>
+
